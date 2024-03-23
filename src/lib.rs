@@ -27,17 +27,11 @@ impl EllipticCurve {
                 if x1 == x2 && FiniteField::add(&y1, &y2, &self.p) == BigUint::from(0u32) {
                     return Point::Identity;
                 }
-                let y2minusy1 = FiniteField::subtract(&y2, &y1, &self.p);
-                let x2minusx1 = FiniteField::subtract(&x2, &x1, &self.p);
-                let s = FiniteField::divide(&y2minusy1, &x2minusx1, &self.p);
-                let s2 = s.modpow(&BigUint::from(2u32), &self.p);
-                let s2minusx1 = FiniteField::subtract(&s2, &x1, &self.p);
-                let x3 = FiniteField::subtract(&s2minusx1, &x2, &self.p);
+                let numerator = FiniteField::subtract(&y2, &y1, &self.p);
+                let denominator = FiniteField::subtract(&x2, &x1, &self.p);
+                let s = FiniteField::divide(&numerator, &denominator, &self.p);
 
-                let x1minusx3 = FiniteField::subtract(&x1, &x3, &self.p);
-                let sx1minusx3 = FiniteField::mult(&s, &x1minusx3, &self.p);
-                let y3 = FiniteField::subtract(&sx1minusx3, &y1, &self.p);
-                Point::Coordinate(x3, y3)
+                self.compute_x3_y3(&s, x1, y1, x2)
             }
         }
     }
@@ -49,6 +43,9 @@ impl EllipticCurve {
         match c {
             Point::Identity => Point::Identity,
             Point::Coordinate(x1, y1) => {
+                if y1 == &BigUint::from(0u32) {
+                    return Point::Identity;
+                }
                 let numerator = x1.modpow(&BigUint::from(2u32), &self.p);
                 let numerator = FiniteField::mult(&BigUint::from(3u32), &numerator, &self.p);
                 let numerator = FiniteField::add(&numerator, &self.a, &self.p);
@@ -83,6 +80,21 @@ impl EllipticCurve {
             }
             Point::Identity => true,
         }
+    }
+    fn scalar_mul(&self, c: &Point, d: &BigUint) -> Point {
+        // a = c
+        // for i in range(i-1 to 0) of bits(d)
+        //     a = 2a
+        //     if bit(i)
+        //          a = a + c
+        let mut a = c.clone();
+        for i in (0..d.bits() - 1).rev() {
+            a = self.doubling(&a);
+            if d.bit(i) {
+                a = self.add(&a, c);
+            }
+        }
+        a
     }
 }
 struct FiniteField {}
@@ -251,5 +263,80 @@ mod tests {
 
         let res = ec.doubling(&p1);
         assert_eq!(res, pr);
+    }
+    #[test]
+    fn test_scalar_mul() {
+        // y^2 = x^3 + 2x + 2 mod 17
+        let ec = EllipticCurve {
+            a: BigUint::from(2u32),
+            b: BigUint::from(2u32),
+            p: BigUint::from(17u32),
+        };
+
+        // 16 (5,1) = (10, 11)
+        let p1 = Point::Coordinate(BigUint::from(5u32), BigUint::from(1u32));
+        let pr = Point::Coordinate(BigUint::from(10u32), BigUint::from(11u32));
+        // let pr = Point::Identity;
+
+        let res = ec.scalar_mul(&p1, &BigUint::from(16u32));
+        assert_eq!(res, pr);
+
+        // 17 (5,1) = (6, 14)
+        let p1 = Point::Coordinate(BigUint::from(5u32), BigUint::from(1u32));
+        let pr = Point::Coordinate(BigUint::from(6u32), BigUint::from(14u32));
+        let res = ec.scalar_mul(&p1, &BigUint::from(17u32));
+        assert_eq!(res, pr);
+
+        // 18 (5,1) = (5, 16)
+        let p1 = Point::Coordinate(BigUint::from(5u32), BigUint::from(1u32));
+        let pr = Point::Coordinate(BigUint::from(5u32), BigUint::from(16u32));
+        let res = ec.scalar_mul(&p1, &BigUint::from(18u32));
+        assert_eq!(res, pr);
+
+        // 19 (5,1) = (10, 11)
+        let p1 = Point::Coordinate(BigUint::from(5u32), BigUint::from(1u32));
+        let pr = Point::Identity;
+
+        let res = ec.scalar_mul(&p1, &BigUint::from(19u32));
+        assert_eq!(res, pr);
+    }
+    fn test_sec256k2() {
+        /*
+                Name	Value
+                p	0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
+                a	0x0000000000000000000000000000000000000000000000000000000000000000
+                b	0x0000000000000000000000000000000000000000000000000000000000000007
+                G	(79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798, 483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8)
+                n	0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+        */
+        let p = BigUint::parse_bytes(
+            b"fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f",
+            16,
+        )
+        .expect("Cannot parse p");
+        let a = BigUint::from(0u32);
+        let b = BigUint::from(7u32);
+        let Gx = BigUint::parse_bytes(
+            b"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            16,
+        )
+        .expect("Cannot parse Gx");
+
+        let Gy = BigUint::parse_bytes(
+            b"483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8",
+            16,
+        )
+        .expect("Cannot parse Gy");
+
+        let n = BigUint::parse_bytes(
+            b"fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+            16,
+        )
+        .expect("Cannot parse n");
+
+        let ec = EllipticCurve { a: a, b: b, p: p };
+        let G = Point::Coordinate(Gx, Gy);
+
+        assert_eq!(ec.scalar_mul(&G, &n), Point::Identity);
     }
 }
