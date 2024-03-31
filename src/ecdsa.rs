@@ -43,12 +43,32 @@ impl ECDSA {
                 FiniteField::inv_mult_prime(&k, &self.q_order).expect("Could not inverse k");
             let s =
                 FiniteField::mult(&hash_plus_dr, &k_inv, &self.q_order).expect("Could not find s");
-            return (s, r);
+            return (r, s);
         }
         panic!("Error while generating signature");
     }
-    pub fn verify(&self, hash: &BigUint, sign: &(BigUint, BigUint)) -> bool {
-        todo!();
+    //// u1 = s^-1 * hash(msg) mod q
+    //// u2 = s^-1 * r mod q
+    //// P = u1 A + u2 B mod q = (xp, yp)       # A is generator and B is pub key.
+    //// if r == xp return 1
+    pub fn verify(&self, hash: &BigUint, signature: &(BigUint, BigUint), pub_key: &Point) -> bool {
+        let (r, s) = signature;
+
+        let s_inv =
+            FiniteField::inv_mult_prime(&s, &self.q_order).expect("Could not get s inverse");
+        let u1 = FiniteField::mult(&s_inv, hash, &self.q_order)
+            .expect("Could not multiply hash and s inv");
+        let u2 = FiniteField::mult(&s_inv, &r, &self.q_order).expect("Could not compute u2");
+        let u1a = EllipticCurve::scalar_mul(&self.ec, &self.a_gen, &u1).expect("Error in u1 A");
+        let u1b = EllipticCurve::scalar_mul(&self.ec, &pub_key, &u2).expect("Error in u1 A");
+        let p = EllipticCurve::add(&self.ec, &u1a, &u1b).expect("Could not compute point P");
+
+        if let Point::Coor(xp, _) = p {
+            if xp == *r {
+                return true;
+            }
+        }
+        return false;
     }
     pub fn generate_hash_less_than(&self, message: &str, max: &BigUint) -> BigUint {
         let hash = digest(message);
@@ -84,5 +104,8 @@ mod test {
         let hash = ecdsa.generate_hash_less_than("Hello World!", &ecdsa.q_order);
         let signature = ecdsa.sign(&priv_key, &hash);
         println!("Signature: {:?}", signature);
+
+        println!("Verify {}", ecdsa.verify(&hash, &signature, &pub_key));
+        assert!(ecdsa.verify(&hash, &signature, &pub_key));
     }
 }
