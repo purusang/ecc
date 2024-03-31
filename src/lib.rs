@@ -300,7 +300,7 @@ mod tests {
         let res = ec.scalar_mul(&p1, &BigUint::from(19u32));
         assert_eq!(res, pr);
     }
-    fn test_sec256k2() {
+    fn test_sec256k1() {
         /*
                 Name	Value
                 p	0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
