@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 num-bigint = { version= "0.4.4", features = ["rand"] }
-ec_generic = "0.1.14"
+ec-generic = "0.1.14"
 rand = "0.8.5"
 sha256 = "1.1.4"
 hex = "0.4.3"
